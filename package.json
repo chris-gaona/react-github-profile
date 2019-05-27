@@ -29,11 +29,6 @@
     "format": "prettier --write \"**/*.+(js|json|css)\"",
     "validate": "cross-env CI=true npm-run-all --parallel test build"
   },
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged && npm run build -s"
-    }
-  },
   "eslintConfig": {
     "extends": "react-app"
   },
