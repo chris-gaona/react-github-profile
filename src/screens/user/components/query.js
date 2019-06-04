@@ -1,19 +1,45 @@
-import {useContext, useReducer, useEffect} from 'react'
+import {useContext, useReducer, useEffect, useRef} from 'react'
 import PropTypes from 'prop-types'
+import isEqual from 'lodash/isEqual'
 import * as GitHub from '../../../github-client'
+
+function useSetState(initialState) {
+  const [state, setState] = useReducer(
+    (state, newState) => ({ ...state, ...newState }),
+    initialState
+  )
+
+  return [state, setState]
+}
+
+function useSafeSetState(initialState) {
+  const [state, setState] = useSetState(initialState)
+
+  // Make sure a ref is mounted before calling setState
+  const mountedRef = useRef(false)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => (mountedRef.current = false)
+  }, [])
+  const safeSetState = (...args) => mountedRef.current && setState(...args)
+  return [state, safeSetState]
+}
 
 function Query({query, variables, children, normalize = data => data}) {
   const client = useContext(GitHub.Context)
-  const [state, setState] = useReducer(
-    (state, newState) => ({ ...state, ...newState }),
-    {loaded: false, fetching: false, data: null, error: null}
-  )
+  const [state, safeSetState] = useSafeSetState({loaded: false, fetching: false, data: null, error: null})
+
   useEffect(() => {
-    setState({fetching: true})
+    if (isEqual(previousInputs.current, [query, variables])) {
+      return
+    }
+
+    safeSetState({fetching: true})
     client
-      .request(query, variables)
-      .then(res =>
-        setState({
+    .request(query, variables)
+    .then(res =>
+        // Better way is to cancel the request instead of checking if a ref is mounted
+        safeSetState({
           data: normalize(res),
           error: null,
           loaded: true,
@@ -21,14 +47,19 @@ function Query({query, variables, children, normalize = data => data}) {
         }),
       )
       .catch(error =>
-        setState({
+        safeSetState({
           error,
           data: null,
           loaded: false,
           fetching: false,
         }),
       )
-  }, [query, variables]) // Only runs useEffect when query & variables has changed from previous render (direct comparison)
+  })
+
+  const previousInputs = useRef()
+  useEffect(() => {
+    previousInputs.current = [query, variables]
+  })
 
   return children(state)
 }
